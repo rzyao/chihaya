@@ -1,0 +1,172 @@
+package passkeyapproval
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "net/url"
+    "strconv"
+    "strings"
+    "time"
+
+    "github.com/gomodule/redigo/redis"
+    yaml "gopkg.in/yaml.v2"
+
+    "github.com/chihaya/chihaya/bittorrent"
+    "github.com/chihaya/chihaya/middleware"
+    "github.com/chihaya/chihaya/pkg/log"
+)
+
+const Name = "passkey approval"
+
+func init() { middleware.RegisterDriver(Name, driver{}) }
+
+type driver struct{}
+
+func (d driver) NewHook(optionBytes []byte) (middleware.Hook, error) {
+    var cfg Config
+    if err := yaml.Unmarshal(optionBytes, &cfg); err != nil { return nil, err }
+    return NewHook(cfg)
+}
+
+var (
+    ErrMissingPasskey   = bittorrent.ClientError("missing passkey")
+    ErrUnapprovedPasskey = bittorrent.ClientError("unapproved passkey")
+)
+
+type Config struct {
+    RedisBroker         string        `yaml:"redis_broker"`
+    SetKey              string        `yaml:"set_key"`
+    HTTPURL             string        `yaml:"http_url"`
+    HTTPTimeout         time.Duration `yaml:"http_timeout"`
+    HTTPAPIKeyHeader    string        `yaml:"http_api_key_header"`
+    HTTPAPIKey          string        `yaml:"http_api_key"`
+    CacheTTLSeconds     int           `yaml:"cache_ttl_seconds"`
+    RedisReadTimeout    time.Duration `yaml:"redis_read_timeout"`
+    RedisWriteTimeout   time.Duration `yaml:"redis_write_timeout"`
+    RedisConnectTimeout time.Duration `yaml:"redis_connect_timeout"`
+}
+
+func (cfg Config) LogFields() log.Fields {
+    return log.Fields{
+        "name": Name,
+        "redisBroker": cfg.RedisBroker,
+        "setKey": cfg.SetKey,
+        "httpURL": cfg.HTTPURL,
+        "httpTimeout": cfg.HTTPTimeout,
+        "httpAPIKeyHeader": cfg.HTTPAPIKeyHeader,
+        "cacheTTLSeconds": cfg.CacheTTLSeconds,
+    }
+}
+
+type hook struct {
+    cfg  Config
+    pool *redis.Pool
+    httpClient *http.Client
+}
+
+func NewHook(cfg Config) (middleware.Hook, error) {
+    if cfg.SetKey == "" { cfg.SetKey = "pt:passkeys" }
+    if cfg.HTTPTimeout <= 0 { cfg.HTTPTimeout = 5 * time.Second }
+    if cfg.HTTPAPIKeyHeader == "" { cfg.HTTPAPIKeyHeader = "X-API-Key" }
+
+    var p *redis.Pool
+    if cfg.RedisBroker != "" {
+        ru, err := parseRedisURL(cfg.RedisBroker)
+        if err != nil { return nil, err }
+        p = &redis.Pool{
+            MaxIdle:     3,
+            IdleTimeout: 240 * time.Second,
+            Dial: func() (redis.Conn, error) {
+                opts := []redis.DialOption{
+                    redis.DialDatabase(ru.DB),
+                    redis.DialReadTimeout(cfg.RedisReadTimeout),
+                    redis.DialWriteTimeout(cfg.RedisWriteTimeout),
+                    redis.DialConnectTimeout(cfg.RedisConnectTimeout),
+                }
+                if ru.Password != "" { opts = append(opts, redis.DialPassword(ru.Password)) }
+                return redis.Dial("tcp", ru.Host, opts...)
+            },
+            TestOnBorrow: func(c redis.Conn, t time.Time) error {
+                if time.Since(t) < 10*time.Second { return nil }
+                _, err := c.Do("PING")
+                return err
+            },
+        }
+    }
+
+    h := &hook{cfg: cfg, pool: p, httpClient: &http.Client{Timeout: cfg.HTTPTimeout}}
+    log.Info("passkey approval middleware enabled", h.cfg)
+    return h, nil
+}
+
+type redisURL struct { Host, Password string; DB int }
+
+func parseRedisURL(target string) (*redisURL, error) {
+    u, err := url.Parse(target)
+    if err != nil { return nil, err }
+    if u.Scheme != "redis" { return nil, fmt.Errorf("no redis scheme found") }
+    db := 0
+    parts := strings.Split(u.Path, "/")
+    if len(parts) > 1 && parts[1] != "" {
+        db, err = strconv.Atoi(parts[1])
+        if err != nil { return nil, err }
+    }
+    return &redisURL{ Host: u.Host, Password: u.User.String(), DB: db }, nil
+}
+
+func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceRequest, resp *bittorrent.AnnounceResponse) (context.Context, error) {
+    passkey := routeParam(ctx, "passkey")
+    if passkey == "" {
+        if v := req.Params; v != nil {
+            if pk, ok := v.String("passkey"); ok { passkey = pk }
+        }
+    }
+    if passkey == "" { return ctx, ErrMissingPasskey }
+
+    if h.pool != nil {
+        conn := h.pool.Get(); defer conn.Close()
+        ok, err := redis.Bool(conn.Do("SISMEMBER", h.cfg.SetKey, passkey))
+        if err == nil && ok { return ctx, nil }
+    }
+
+    if h.cfg.HTTPURL != "" {
+        q := url.Values{}
+        q.Set("passkey", passkey)
+        u := h.cfg.HTTPURL
+        if strings.Contains(u, "?") { u = u + "&" + q.Encode() } else { u = u + "?" + q.Encode() }
+        req, err := http.NewRequest(http.MethodGet, u, nil)
+        if err == nil {
+            if h.cfg.HTTPAPIKey != "" {
+                req.Header.Set(h.cfg.HTTPAPIKeyHeader, h.cfg.HTTPAPIKey)
+            }
+            r, err := h.httpClient.Do(req)
+            if err == nil && r != nil {
+                var vr struct{ Valid bool `json:"valid"` }
+                _ = json.NewDecoder(r.Body).Decode(&vr)
+                r.Body.Close()
+                if r.StatusCode/100 == 2 && vr.Valid {
+                    if h.pool != nil && h.cfg.CacheTTLSeconds > 0 {
+                        conn := h.pool.Get(); defer conn.Close()
+                        _, _ = conn.Do("SADD", h.cfg.SetKey, passkey)
+                        if h.cfg.CacheTTLSeconds > 0 {
+                            _, _ = conn.Do("EXPIRE", h.cfg.SetKey, h.cfg.CacheTTLSeconds)
+                        }
+                    }
+                    return ctx, nil
+                }
+            }
+        }
+    }
+
+    return ctx, ErrUnapprovedPasskey
+}
+
+func (h *hook) HandleScrape(ctx context.Context, req *bittorrent.ScrapeRequest, resp *bittorrent.ScrapeResponse) (context.Context, error) { return ctx, nil }
+
+func routeParam(ctx context.Context, name string) string {
+    rp, _ := ctx.Value(bittorrent.RouteParamsKey).(bittorrent.RouteParams)
+    if rp == nil { return "" }
+    return rp.ByName(name)
+}
