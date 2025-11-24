@@ -1,0 +1,179 @@
+---
+chihaya:
+  # Announce 间隔：告知客户端在不同事件之间应隔多久再次上报
+  announce_interval: "30m"
+
+  # 最小 Announce 间隔：告知客户端两次上报之间的最短时间
+  min_announce_interval: "15m"
+
+  # 指标服务器监听地址：用于采集 Prometheus 指标与 pprof 性能分析
+  #
+  # /metrics：Prometheus 指标
+  # /debug/pprof/{cmdline,profile,symbol,trace}：pprof 性能分析端点
+  metrics_addr: "0.0.0.0:6880"
+
+  # HTTP 前端配置；如不使用可删除此段
+  http:
+    # HTTP 监听地址；删除则禁用非 TLS 监听
+    addr: "0.0.0.0:6969"
+
+    # HTTPS 监听地址；设置后必须同时提供 tls_cert_path 与 tls_key_path
+    https_addr: ""
+
+    # HTTPS 所需证书与私钥文件路径
+    tls_cert_path: ""
+    tls_key_path: ""
+
+    # HTTP 请求超时设置
+    read_timeout: "5s"
+    write_timeout: "5s"
+
+    # 是否启用长连接（Keep-Alive）；公共 Tracker 通常不需要，但在反代或少量高频请求场景可提升性能
+    enable_keepalive: false
+    idle_timeout: "30s"
+
+    # 是否记录请求耗时；关闭可提升性能、降低负载
+    enable_request_timing: false
+
+    # Announce 路由列表：支持多路由与命名参数（参考 httprouter 命名参数用法）
+    announce_routes:
+      - "/announce"
+      # - "/announce.php"
+
+    # Scrape 路由列表：支持多路由与命名参数（参考 httprouter 命名参数用法）
+    scrape_routes:
+      - "/scrape"
+      # - "/scrape.php"
+
+    # 允许 IP 伪装：启用后优先使用客户端上报的 ip/ipv4/ipv6 参数
+    allow_ip_spoofing: false
+
+    # 反向代理场景下用于获取真实客户端 IP 的 HTTP 头
+    real_ip_header: "x-real-ip"
+
+    # 单次请求返回的 peers 最大数量
+    max_numwant: 100
+
+    # 单次请求返回的 peers 默认数量
+    default_numwant: 50
+
+    # 单次 Scrape 请求可查询的 infohash 最大数量
+    max_scrape_infohashes: 50
+
+  # UDP 前端配置；如不使用可删除此段
+  udp:
+    # UDP 监听地址
+    addr: "0.0.0.0:6969"
+
+    # 连接 ID 时间戳的容差（最大允许时钟偏差）
+    max_clock_skew: "10s"
+
+    # 用于生成连接 ID 的私钥（随机字符串）
+    private_key: "paste a random string here that will be used to hmac connection IDs"
+
+    # 是否记录请求耗时；关闭可提升性能、降低负载
+    enable_request_timing: false
+
+    # 允许 IP 伪装：启用后优先使用客户端上报的 IP
+    allow_ip_spoofing: false
+
+    # 单次请求返回的 peers 最大数量
+    max_numwant: 100
+
+    # 单次请求返回的 peers 默认数量
+    default_numwant: 50
+
+    # 单次 Scrape 请求可查询的 infohash 最大数量
+    max_scrape_infohashes: 50
+
+
+  # Peer 存储配置
+  storage:
+    name: "memory"
+    config:
+      # 垃圾回收频率：值越低更频繁回收（更耗 CPU，节省内存）；值越高更少回收（省 CPU，占用更多内存）
+      gc_interval: "3m"
+
+      # Peer 过期时间：建议略大于 `announce_interval` 以避免抖动
+      peer_lifetime: "31m"
+
+      # 分片数量：提高并行度
+      shard_count: 1024
+
+      # 指标上报间隔：infohash 与 peers 数量聚合后上报至 Prometheus
+      prometheus_reporting_interval: "1s"
+
+  # Redis 存储配置示例（如需使用请取消注释并填充参数）
+  # storage:
+  #   name: redis
+  #   config:
+  #     # 垃圾回收频率：值越低更频繁回收（更耗 CPU，节省内存）；值越高更少回收（省 CPU，占用更多内存）
+  #     gc_interval: "3m"
+  #
+  #     # 指标上报间隔：infohash 与 peers 数量聚合后上报至 Prometheus
+  #     prometheus_reporting_interval: "1s"
+  #
+  #     # Peer 过期时间：建议略大于 `announce_interval`
+  #     peer_lifetime: "31m"
+  #
+  #     # Redis 地址
+  #     redis_broker: "redis://pwd@127.0.0.1:6379/0"
+  #
+  #     # 读取超时
+  #     redis_read_timeout: "15s"
+  #
+  #     # 写入超时
+  #     redis_write_timeout: "15s"
+  #
+  #     # 连接超时
+  #     redis_connect_timeout: "15s"
+
+  # 中间件配置（在返回响应前执行）
+  prehooks:
+    # 流量推送中间件：在 Announce 时将增量上传/下载写入 Redis Streams 供 PT 消费
+    - name: "traffic push"
+      options:
+        redis_broker: "redis://redis_tkiskZ@127.0.0.1:6379/0"  # Redis 连接串（含密码与 DB）
+        stream_key: "tracker:traffic"                 # Redis Stream 的键名
+        last_key_prefix: "tracker:last"               # 记录上次计数的 Hash 前缀
+        retry_count: 3                                 # 推送失败重试次数
+        retry_interval: "1s"                          # 重试间隔
+        redis_read_timeout: "15s"                     # 读取超时
+        redis_write_timeout: "15s"                    # 写入超时
+        redis_connect_timeout: "15s"                  # 连接超时
+
+    # passkey 审批中间件：优先在 Redis 集合校验；未命中时回源 PT 接口
+    - name: "passkey approval"
+      options:
+        redis_broker: "redis://redis_tkiskZ@127.0.0.1:6379/0"  # 可选：Redis 连接串
+        set_key: "pt:passkeys"                        # Redis 集合键名（成员为合法 passkey）
+        http_url: "https://pt.example.com/api/passkey/verify"  # 回源校验接口，GET ?passkey=
+        http_timeout: "5s"                            # 回源请求超时
+        http_api_key_header: "X-API-Key"              # 回源接口请求头名
+        http_api_key: "YOUR_TRACKER_API_KEY"          # 回源接口鉴权密钥
+        cache_ttl_seconds: 300                         # 可选：命中回源后本地缓存 TTL（秒）
+        redis_read_timeout: "15s"
+        redis_write_timeout: "15s"
+        redis_connect_timeout: "15s"
+  # （已不使用 JWT；如需启用，请参见 JWT 或 JWT Optional 配置示例）
+
+  # - name: "client approval"
+  #   options:
+  #     whitelist:
+  #       - "OP1011"   # 允许的客户端 ID（6 字节）
+  #     blacklist:
+  #       - "OP1012"   # 拒绝的客户端 ID（6 字节）
+
+  # - name: "interval variation"
+  #   options:
+  #     modify_response_probability: 0.2  # 修改响应的概率（0-1）
+  #     max_increase_delta: 60             # 最大增加秒数
+  #     modify_min_interval: true          # 是否同时增加 min_interval
+
+  # 允许/拒绝指定种子（infohash）配置示例；哈希应为十六进制编码
+  # - name: "torrent approval"
+  #   options:
+  #     whitelist:
+  #       - "a1b2c3d4e5a1b2c3d4e5a1b2c3d4e5a1b2c3d4e5"
+  #     blacklist:
+  #       - "e1d2c3b4a5e1b2c3b4a5e1d2c3b4e5e1d2c3b4a5"
