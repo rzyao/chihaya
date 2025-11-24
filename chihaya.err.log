@@ -1,0 +1,8 @@
+time="2025-11-25T03:07:05+08:00" level=info msg="starting metrics server" addr="0.0.0.0:6880" lang=
+time="2025-11-25T03:07:05+08:00" level=info msg="starting storage" name=memory
+time="2025-11-25T03:07:05+08:00" level=info msg="started storage" gcInterval=3m0s name=memory peerLifetime=31m0s promReportInterval=1s shardCount=1024
+time="2025-11-25T03:07:05+08:00" level=info msg="traffic push middleware enabled" lastKeyPrefix="tracker:last" name="traffic push" redisBroker="redis://redis_tkiskZ@127.0.0.1:6379/0" redisConnectTimeout=15s redisReadTimeout=15s redisWriteTimeout=15s retryCount=3 retryInterval=1s streamKey="tracker:traffic"
+time="2025-11-25T03:07:05+08:00" level=info msg="passkey approval middleware enabled" cacheTTLSeconds=300 httpAPIKeyHeader=X-API-Key httpTimeout=5s httpURL="https://pt.example.com/api/passkey/verify" name="passkey approval" redisBroker="redis://redis_tkiskZ@127.0.0.1:6379/0" setKey="pt:passkeys"
+time="2025-11-25T03:07:05+08:00" level=info msg="starting tracker logic" posthooks="[]" prehooks="[traffic push passkey approval]"
+time="2025-11-25T03:07:05+08:00" level=info msg="starting HTTP frontend" addr="0.0.0.0:6969" allowIPSpoofing=false announceRoutes="[/announce]" defaultNumWant=50 enableKeepAlive=false enableRequestTiming=false httpsAddr= idleTimeout=30s maxNumWant=100 maxScrapeInfoHashes=50 readTimeout=5s realIPHeader=x-real-ip scrapeRoutes="[/scrape]" tlsCertPath= tlsKeyPath= writeTimeout=5s
+time="2025-11-25T03:07:05+08:00" level=info msg="starting UDP frontend" addr="0.0.0.0:6969" allowIPSpoofing=false defaultNumWant=50 enableRequestTiming=false maxClockSkew=10s maxNumWant=100 maxScrapeInfoHashes=50 privateKey="paste a random string here that will be used to hmac connection IDs"
