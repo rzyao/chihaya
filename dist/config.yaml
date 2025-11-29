@@ -157,12 +157,13 @@ chihaya:
         redis_connect_timeout: "15s"
   # （已不使用 JWT；如需启用，请参见 JWT 或 JWT Optional 配置示例）
 
+  # 客户端白名单配置
   # - name: "client approval"
   #   options:
   #     whitelist:
-  #       - "OP1011"   # 允许的客户端 ID（6 字节）
-  #     blacklist:
-  #       - "OP1012"   # 拒绝的客户端 ID（6 字节）
+  #       - "-qB425"
+  #       - "-TR294"
+  #       - "-DE202"
 
   # - name: "interval variation"
   #   options:
