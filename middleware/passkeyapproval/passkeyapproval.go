@@ -245,6 +245,9 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 		conn := h.pool.Get()
 		defer conn.Close()
 		ok, err := redis.Bool(conn.Do("SISMEMBER", h.cfg.SetKey, passkey))
+		if err != nil {
+			log.Error("failed to check passkey in redis", log.Fields{"err": err, "key": h.cfg.SetKey})
+		}
 		if err == nil && ok {
 			return ctx, nil
 		}
@@ -260,12 +263,16 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 			u = u + "?" + q.Encode()
 		}
 		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err == nil {
+		if err != nil {
+			log.Error("failed to create http request", log.Fields{"err": err, "url": u})
+		} else {
 			if h.cfg.HTTPAPIKey != "" {
 				req.Header.Set(h.cfg.HTTPAPIKeyHeader, h.cfg.HTTPAPIKey)
 			}
 			r, err := h.httpClient.Do(req)
-			if err == nil && r != nil {
+			if err != nil {
+				log.Error("failed to perform http request", log.Fields{"err": err, "url": u})
+			} else if r != nil {
 				var vr struct {
 					Valid bool `json:"valid"`
 				}
@@ -281,6 +288,8 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 						}
 					}
 					return ctx, nil
+				} else if r.StatusCode/100 != 2 {
+					log.Warn("http validation returned non-200 status", log.Fields{"status": r.StatusCode, "url": u})
 				}
 			}
 		}
