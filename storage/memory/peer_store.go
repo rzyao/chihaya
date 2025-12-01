@@ -60,16 +60,18 @@ type Config struct {
 	PrometheusReportingInterval time.Duration `yaml:"prometheus_reporting_interval"`
 	PeerLifetime                time.Duration `yaml:"peer_lifetime"`
 	ShardCount                  int           `yaml:"shard_count"`
+	EnableDualStackPeers        bool          `yaml:"enable_dual_stack_peers"`
 }
 
 // LogFields renders the current config as a set of Logrus fields.
 func (cfg Config) LogFields() log.Fields {
 	return log.Fields{
-		"name":               Name,
-		"gcInterval":         cfg.GarbageCollectionInterval,
-		"promReportInterval": cfg.PrometheusReportingInterval,
-		"peerLifetime":       cfg.PeerLifetime,
-		"shardCount":         cfg.ShardCount,
+		"name":                 Name,
+		"gcInterval":           cfg.GarbageCollectionInterval,
+		"promReportInterval":   cfg.PrometheusReportingInterval,
+		"peerLifetime":         cfg.PeerLifetime,
+		"shardCount":           cfg.ShardCount,
+		"enableDualStackPeers": cfg.EnableDualStackPeers,
 	}
 }
 
@@ -116,12 +118,24 @@ func (cfg Config) Validate() Config {
 		})
 	}
 
+	// EnableDualStackPeers defaults to true if not explicitly set
+	// Note: In YAML, a missing boolean field defaults to false, so we can't distinguish
+	// between "not set" and "explicitly set to false". We'll default to true in New().
+	validcfg.EnableDualStackPeers = cfg.EnableDualStackPeers
+
 	return validcfg
 }
 
 // New creates a new PeerStore backed by memory.
 func New(provided Config) (storage.PeerStore, error) {
 	cfg := provided.Validate()
+	// Default EnableDualStackPeers to true if not explicitly set
+	if !provided.EnableDualStackPeers && cfg.EnableDualStackPeers == false {
+		cfg.EnableDualStackPeers = true
+		log.Info("defaulting to dual-stack peer discovery", log.Fields{
+			"enableDualStackPeers": true,
+		})
+	}
 	ps := &peerStore{
 		cfg:    cfg,
 		shards: make([]*peerShard, cfg.ShardCount*2),
@@ -432,46 +446,20 @@ func (ps *peerStore) AnnouncePeers(ih bittorrent.InfoHash, seeder bool, numWant 
 	default:
 	}
 
-	shard := ps.shards[ps.shardIndex(ih, announcer.IP.AddressFamily)]
-	shard.RLock()
+	if !ps.cfg.EnableDualStackPeers {
+		// Original single-stack behavior
+		shard := ps.shards[ps.shardIndex(ih, announcer.IP.AddressFamily)]
+		shard.RLock()
 
-	if _, ok := shard.swarms[ih]; !ok {
-		shard.RUnlock()
-		return nil, storage.ErrResourceDoesNotExist
-	}
-
-	if seeder {
-		// Append leechers as possible.
-		leechers := shard.swarms[ih].leechers
-		for pk := range leechers {
-			if numWant == 0 {
-				break
-			}
-
-			peers = append(peers, decodePeerKey(pk))
-			numWant--
-		}
-	} else {
-		// Append as many seeders as possible.
-		seeders := shard.swarms[ih].seeders
-		for pk := range seeders {
-			if numWant == 0 {
-				break
-			}
-
-			peers = append(peers, decodePeerKey(pk))
-			numWant--
+		if _, ok := shard.swarms[ih]; !ok {
+			shard.RUnlock()
+			return nil, storage.ErrResourceDoesNotExist
 		}
 
-		// Append leechers until we reach numWant.
-		if numWant > 0 {
+		if seeder {
+			// Append leechers as possible.
 			leechers := shard.swarms[ih].leechers
-			announcerPK := newPeerKey(announcer)
 			for pk := range leechers {
-				if pk == announcerPK {
-					continue
-				}
-
 				if numWant == 0 {
 					break
 				}
@@ -479,10 +467,167 @@ func (ps *peerStore) AnnouncePeers(ih bittorrent.InfoHash, seeder bool, numWant 
 				peers = append(peers, decodePeerKey(pk))
 				numWant--
 			}
+		} else {
+			// Append as many seeders as possible.
+			seeders := shard.swarms[ih].seeders
+			for pk := range seeders {
+				if numWant == 0 {
+					break
+				}
+
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+
+			// Append leechers until we reach numWant.
+			if numWant > 0 {
+				leechers := shard.swarms[ih].leechers
+				announcerPK := newPeerKey(announcer)
+				for pk := range leechers {
+					if pk == announcerPK {
+						continue
+					}
+
+					if numWant == 0 {
+						break
+					}
+
+					peers = append(peers, decodePeerKey(pk))
+					numWant--
+				}
+			}
+		}
+
+		shard.RUnlock()
+		return
+	}
+
+	// Dual-stack behavior: query both IPv4 and IPv6 shards
+	ipv4Shard := ps.shards[ps.shardIndex(ih, bittorrent.IPv4)]
+	ipv6Shard := ps.shards[ps.shardIndex(ih, bittorrent.IPv6)]
+
+	// Determine which shard is "same" and which is "other" based on announcer's address family
+	var sameShard, otherShard *peerShard
+	if announcer.IP.AddressFamily == bittorrent.IPv4 {
+		sameShard = ipv4Shard
+		otherShard = ipv6Shard
+	} else {
+		sameShard = ipv6Shard
+		otherShard = ipv4Shard
+	}
+
+	// Lock both shards (always lock in consistent order to avoid deadlock)
+	if ipv4Shard == sameShard {
+		ipv4Shard.RLock()
+		ipv6Shard.RLock()
+		defer ipv4Shard.RUnlock()
+		defer ipv6Shard.RUnlock()
+	} else {
+		ipv6Shard.RLock()
+		ipv4Shard.RLock()
+		defer ipv6Shard.RUnlock()
+		defer ipv4Shard.RUnlock()
+	}
+
+	// Check if swarm exists in at least one shard
+	sameSwarmExists := false
+	otherSwarmExists := false
+	if _, ok := sameShard.swarms[ih]; ok {
+		sameSwarmExists = true
+	}
+	if _, ok := otherShard.swarms[ih]; ok {
+		otherSwarmExists = true
+	}
+
+	if !sameSwarmExists && !otherSwarmExists {
+		return nil, storage.ErrResourceDoesNotExist
+	}
+
+	announcerPK := newPeerKey(announcer)
+
+	if seeder {
+		// Seeder wants leechers
+		// Priority: same-family leechers, then other-family leechers
+
+		// Get leechers from same address family
+		if sameSwarmExists {
+			leechers := sameShard.swarms[ih].leechers
+			for pk := range leechers {
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+		}
+
+		// Get leechers from other address family if we still need more
+		if numWant > 0 && otherSwarmExists {
+			leechers := otherShard.swarms[ih].leechers
+			for pk := range leechers {
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+		}
+	} else {
+		// Leecher wants seeders (and other leechers)
+		// Priority: same-family seeders, other-family seeders, same-family leechers, other-family leechers
+
+		// Get seeders from same address family
+		if sameSwarmExists {
+			seeders := sameShard.swarms[ih].seeders
+			for pk := range seeders {
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+		}
+
+		// Get seeders from other address family
+		if numWant > 0 && otherSwarmExists {
+			seeders := otherShard.swarms[ih].seeders
+			for pk := range seeders {
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+		}
+
+		// Get leechers from same address family (excluding self)
+		if numWant > 0 && sameSwarmExists {
+			leechers := sameShard.swarms[ih].leechers
+			for pk := range leechers {
+				if pk == announcerPK {
+					continue
+				}
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
+		}
+
+		// Get leechers from other address family
+		if numWant > 0 && otherSwarmExists {
+			leechers := otherShard.swarms[ih].leechers
+			for pk := range leechers {
+				if numWant == 0 {
+					break
+				}
+				peers = append(peers, decodePeerKey(pk))
+				numWant--
+			}
 		}
 	}
 
-	shard.RUnlock()
 	return
 }
 
@@ -494,18 +639,49 @@ func (ps *peerStore) ScrapeSwarm(ih bittorrent.InfoHash, addressFamily bittorren
 	}
 
 	resp.InfoHash = ih
-	shard := ps.shards[ps.shardIndex(ih, addressFamily)]
-	shard.RLock()
 
-	swarm, ok := shard.swarms[ih]
-	if !ok {
+	if !ps.cfg.EnableDualStackPeers {
+		// Original single-stack behavior
+		shard := ps.shards[ps.shardIndex(ih, addressFamily)]
+		shard.RLock()
+
+		swarm, ok := shard.swarms[ih]
+		if !ok {
+			shard.RUnlock()
+			return
+		}
+
+		resp.Incomplete = uint32(len(swarm.leechers))
+		resp.Complete = uint32(len(swarm.seeders))
 		shard.RUnlock()
+
 		return
 	}
 
-	resp.Incomplete = uint32(len(swarm.leechers))
-	resp.Complete = uint32(len(swarm.seeders))
-	shard.RUnlock()
+	// Dual-stack behavior: aggregate stats from both IPv4 and IPv6 shards
+	ipv4Shard := ps.shards[ps.shardIndex(ih, bittorrent.IPv4)]
+	ipv6Shard := ps.shards[ps.shardIndex(ih, bittorrent.IPv6)]
+
+	// Lock both shards in consistent order
+	ipv4Shard.RLock()
+	ipv6Shard.RLock()
+	defer ipv4Shard.RUnlock()
+	defer ipv6Shard.RUnlock()
+
+	var totalSeeders, totalLeechers uint32
+
+	if swarm, ok := ipv4Shard.swarms[ih]; ok {
+		totalSeeders += uint32(len(swarm.seeders))
+		totalLeechers += uint32(len(swarm.leechers))
+	}
+
+	if swarm, ok := ipv6Shard.swarms[ih]; ok {
+		totalSeeders += uint32(len(swarm.seeders))
+		totalLeechers += uint32(len(swarm.leechers))
+	}
+
+	resp.Complete = totalSeeders
+	resp.Incomplete = totalLeechers
 
 	return
 }

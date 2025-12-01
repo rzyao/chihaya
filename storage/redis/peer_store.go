@@ -88,19 +88,21 @@ type Config struct {
 	RedisReadTimeout            time.Duration `yaml:"redis_read_timeout"`
 	RedisWriteTimeout           time.Duration `yaml:"redis_write_timeout"`
 	RedisConnectTimeout         time.Duration `yaml:"redis_connect_timeout"`
+	EnableDualStackPeers        bool          `yaml:"enable_dual_stack_peers"`
 }
 
 // LogFields renders the current config as a set of Logrus fields.
 func (cfg Config) LogFields() log.Fields {
 	return log.Fields{
-		"name":                Name,
-		"gcInterval":          cfg.GarbageCollectionInterval,
-		"promReportInterval":  cfg.PrometheusReportingInterval,
-		"peerLifetime":        cfg.PeerLifetime,
-		"redisBroker":         cfg.RedisBroker,
-		"redisReadTimeout":    cfg.RedisReadTimeout,
-		"redisWriteTimeout":   cfg.RedisWriteTimeout,
-		"redisConnectTimeout": cfg.RedisConnectTimeout,
+		"name":                 Name,
+		"gcInterval":           cfg.GarbageCollectionInterval,
+		"promReportInterval":   cfg.PrometheusReportingInterval,
+		"peerLifetime":         cfg.PeerLifetime,
+		"redisBroker":          cfg.RedisBroker,
+		"redisReadTimeout":     cfg.RedisReadTimeout,
+		"redisWriteTimeout":    cfg.RedisWriteTimeout,
+		"redisConnectTimeout":  cfg.RedisConnectTimeout,
+		"enableDualStackPeers": cfg.EnableDualStackPeers,
 	}
 }
 
@@ -174,12 +176,22 @@ func (cfg Config) Validate() Config {
 		})
 	}
 
+	// EnableDualStackPeers defaults to true if not explicitly set
+	validcfg.EnableDualStackPeers = cfg.EnableDualStackPeers
+
 	return validcfg
 }
 
 // New creates a new PeerStore backed by redis.
 func New(provided Config) (storage.PeerStore, error) {
 	cfg := provided.Validate()
+	// Default EnableDualStackPeers to true if not explicitly set
+	if !provided.EnableDualStackPeers && cfg.EnableDualStackPeers == false {
+		cfg.EnableDualStackPeers = true
+		log.Info("defaulting to dual-stack peer discovery", log.Fields{
+			"enableDualStackPeers": true,
+		})
+	}
 
 	u, err := parseRedisURL(cfg.RedisBroker)
 	if err != nil {

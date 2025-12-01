@@ -103,6 +103,11 @@ chihaya:
       # 指标上报间隔：infohash 与 peers 数量聚合后上报至 Prometheus
       prometheus_reporting_interval: "1s"
 
+      # 启用 IPv4/IPv6 双栈 Peers 发现：允许不同 IP 协议版本的客户端互相发现
+      # - true: IPv4 客户端可以看到 IPv6 peers，反之亦然（推荐，默认值）
+      # - false: 严格隔离，IPv4 只能看到 IPv4，IPv6 只能看到 IPv6（传统模式）
+      enable_dual_stack_peers: true
+
   # Redis 存储配置示例（如需使用请取消注释并填充参数）
   # storage:
   #   name: redis
