@@ -250,10 +250,18 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 			log.Error("failed to check passkey in redis", log.Fields{"err": err, "key": h.cfg.SetKey})
 		}
 		if err == nil && ok {
-			log.Info("passkey found in redis", log.Fields{"key": h.cfg.SetKey, "passkey": passkey})
+			log.Info("passkey found in redis", log.Fields{
+				"key":      h.cfg.SetKey,
+				"passkey":  passkey,
+				"InfoHash": req.InfoHash.String(),
+			})
 			return ctx, nil
 		}
-		log.Info("passkey not found in redis", log.Fields{"key": h.cfg.SetKey, "passkey": passkey})
+		log.Info("passkey not found in redis", log.Fields{
+			"key":      h.cfg.SetKey,
+			"passkey":  passkey,
+			"InfoHash": req.InfoHash.String(),
+		})
 	}
 
 	if h.cfg.HTTPURL != "" {
@@ -265,7 +273,11 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 		} else {
 			u = u + "?" + q.Encode()
 		}
-		log.Info("checking passkey with http api", log.Fields{"url": u, "passkey": passkey})
+		log.Info("checking passkey with http api", log.Fields{
+			"passkey":  passkey,
+			"url":      u,
+			"InfoHash": req.InfoHash.String(),
+		})
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		if err != nil {
 			log.Error("failed to create http request", log.Fields{"err": err, "url": u})
