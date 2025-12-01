@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -279,9 +280,10 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 				var vr struct {
 					Valid bool `json:"valid"`
 				}
-				_ = json.NewDecoder(r.Body).Decode(&vr)
+				bodyBytes, _ := io.ReadAll(r.Body)
 				r.Body.Close()
-				log.Info("http validation result", log.Fields{"url": u, "status": r.StatusCode, "valid": vr.Valid, "passkey": passkey})
+				_ = json.Unmarshal(bodyBytes, &vr)
+				log.Info("http validation result", log.Fields{"url": u, "status": r.StatusCode, "valid": vr.Valid, "passkey": passkey, "body": string(bodyBytes)})
 				if r.StatusCode/100 == 2 && vr.Valid {
 					if h.pool != nil && h.cfg.CacheTTLSeconds > 0 {
 						conn := h.pool.Get()
