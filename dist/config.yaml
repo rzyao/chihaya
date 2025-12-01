@@ -133,7 +133,7 @@ chihaya:
     # 流量推送中间件：在 Announce 时将增量上传/下载写入 Redis Streams 供 PT 消费
     - name: "traffic push"
       options:
-        redis_broker: "redis://redis_rnayhp@127.0.0.1:6379/0"  # Redis 连接串（含密码与 DB）
+        redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"  # Redis 连接串（含密码与 DB）
         stream_key: "tracker:traffic"                 # Redis Stream 的键名
         last_key_prefix: "tracker:last"               # 记录上次计数的 Hash 前缀
         retry_count: 3                                 # 推送失败重试次数
@@ -145,7 +145,7 @@ chihaya:
     # passkey 审批中间件：优先在 Redis 集合校验；未命中时回源 PT 接口
     - name: "passkey approval"
       options:
-        redis_broker: "redis://redis_rnayhp@127.0.0.1:6379/0"  # 可选：Redis 连接串
+        redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"  # 可选：Redis 连接串
         set_key: "pt:passkeys"                        # Redis 集合键名（成员为合法 passkey）
         http_url: "http://127.0.0.1:8890/passkey/verify"  # 回源校验接口，GET ?passkey=
         http_timeout: "5s"                            # 回源请求超时

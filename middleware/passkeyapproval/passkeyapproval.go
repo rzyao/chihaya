@@ -249,8 +249,10 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 			log.Error("failed to check passkey in redis", log.Fields{"err": err, "key": h.cfg.SetKey})
 		}
 		if err == nil && ok {
+			log.Info("passkey found in redis", log.Fields{"key": h.cfg.SetKey, "passkey": passkey})
 			return ctx, nil
 		}
+		log.Info("passkey not found in redis", log.Fields{"key": h.cfg.SetKey, "passkey": passkey})
 	}
 
 	if h.cfg.HTTPURL != "" {
@@ -262,6 +264,7 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 		} else {
 			u = u + "?" + q.Encode()
 		}
+		log.Info("checking passkey with http api", log.Fields{"url": u, "passkey": passkey})
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		if err != nil {
 			log.Error("failed to create http request", log.Fields{"err": err, "url": u})
@@ -278,6 +281,7 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 				}
 				_ = json.NewDecoder(r.Body).Decode(&vr)
 				r.Body.Close()
+				log.Info("http validation result", log.Fields{"url": u, "status": r.StatusCode, "valid": vr.Valid, "passkey": passkey})
 				if r.StatusCode/100 == 2 && vr.Valid {
 					if h.pool != nil && h.cfg.CacheTTLSeconds > 0 {
 						conn := h.pool.Get()
