@@ -278,13 +278,17 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 				log.Error("failed to perform http request", log.Fields{"err": err, "url": u})
 			} else if r != nil {
 				var vr struct {
-					Valid bool `json:"valid"`
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+					Data    struct {
+						Valid bool `json:"valid"`
+					} `json:"data"`
 				}
 				bodyBytes, _ := io.ReadAll(r.Body)
 				r.Body.Close()
 				_ = json.Unmarshal(bodyBytes, &vr)
-				log.Info("http validation result", log.Fields{"url": u, "status": r.StatusCode, "valid": vr.Valid, "passkey": passkey, "body": string(bodyBytes)})
-				if r.StatusCode/100 == 2 && vr.Valid {
+				log.Info("http validation result", log.Fields{"url": u, "status": r.StatusCode, "valid": vr.Data.Valid, "passkey": passkey, "body": string(bodyBytes)})
+				if r.StatusCode/100 == 2 && vr.Data.Valid {
 					if h.pool != nil && h.cfg.CacheTTLSeconds > 0 {
 						conn := h.pool.Get()
 						defer conn.Close()
