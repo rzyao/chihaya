@@ -6,3 +6,4 @@ time="2025-11-25T03:07:05+08:00" level=info msg="passkey approval middleware ena
 time="2025-11-25T03:07:05+08:00" level=info msg="starting tracker logic" posthooks="[]" prehooks="[traffic push passkey approval]"
 time="2025-11-25T03:07:05+08:00" level=info msg="starting HTTP frontend" addr="0.0.0.0:6969" allowIPSpoofing=false announceRoutes="[/announce]" defaultNumWant=50 enableKeepAlive=false enableRequestTiming=false httpsAddr= idleTimeout=30s maxNumWant=100 maxScrapeInfoHashes=50 readTimeout=5s realIPHeader=x-real-ip scrapeRoutes="[/scrape]" tlsCertPath= tlsKeyPath= writeTimeout=5s
 time="2025-11-25T03:07:05+08:00" level=info msg="starting UDP frontend" addr="0.0.0.0:6969" allowIPSpoofing=false defaultNumWant=50 enableRequestTiming=false maxClockSkew=10s maxNumWant=100 maxScrapeInfoHashes=50 privateKey="paste a random string here that will be used to hmac connection IDs"
+time="2025-12-01T00:33:15+08:00" level=info msg="shutting down; received shutdown signal"
