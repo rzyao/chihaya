@@ -446,6 +446,15 @@ func (ps *peerStore) AnnouncePeers(ih bittorrent.InfoHash, seeder bool, numWant 
 	default:
 	}
 
+	log.Debug("storage: AnnouncePeers called", log.Fields{
+		"InfoHash":        ih.String(),
+		"seeder":          seeder,
+		"numWant":         numWant,
+		"announcer":       announcer.String(),
+		"announcerFamily": announcer.IP.AddressFamily.String(),
+		"enableDualStack": ps.cfg.EnableDualStackPeers,
+	})
+
 	if !ps.cfg.EnableDualStackPeers {
 		// Original single-stack behavior
 		shard := ps.shards[ps.shardIndex(ih, announcer.IP.AddressFamily)]
@@ -532,14 +541,39 @@ func (ps *peerStore) AnnouncePeers(ih bittorrent.InfoHash, seeder bool, numWant 
 	// Check if swarm exists in at least one shard
 	sameSwarmExists := false
 	otherSwarmExists := false
-	if _, ok := sameShard.swarms[ih]; ok {
+	var sameSeeders, sameLeechers, otherSeeders, otherLeechers int
+	if swarm, ok := sameShard.swarms[ih]; ok {
 		sameSwarmExists = true
+		sameSeeders = len(swarm.seeders)
+		sameLeechers = len(swarm.leechers)
 	}
-	if _, ok := otherShard.swarms[ih]; ok {
+	if swarm, ok := otherShard.swarms[ih]; ok {
 		otherSwarmExists = true
+		otherSeeders = len(swarm.seeders)
+		otherLeechers = len(swarm.leechers)
 	}
 
+	log.Debug("storage: dual-stack swarm status", log.Fields{
+		"InfoHash":        ih.String(),
+		"sameFamily":      announcer.IP.AddressFamily.String(),
+		"sameSwarmExists": sameSwarmExists,
+		"sameSeeders":     sameSeeders,
+		"sameLeechers":    sameLeechers,
+		"otherFamily": func() string {
+			if announcer.IP.AddressFamily == bittorrent.IPv4 {
+				return "IPv6"
+			}
+			return "IPv4"
+		}(),
+		"otherSwarmExists": otherSwarmExists,
+		"otherSeeders":     otherSeeders,
+		"otherLeechers":    otherLeechers,
+	})
+
 	if !sameSwarmExists && !otherSwarmExists {
+		log.Warn("storage: swarm does not exist in any shard", log.Fields{
+			"InfoHash": ih.String(),
+		})
 		return nil, storage.ErrResourceDoesNotExist
 	}
 
@@ -627,6 +661,13 @@ func (ps *peerStore) AnnouncePeers(ih bittorrent.InfoHash, seeder bool, numWant 
 			}
 		}
 	}
+
+	log.Debug("storage: AnnouncePeers result", log.Fields{
+		"InfoHash":      ih.String(),
+		"announcer":     announcer.String(),
+		"peersReturned": len(peers),
+		"numWant":       numWant,
+	})
 
 	return
 }
