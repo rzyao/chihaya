@@ -26,9 +26,18 @@ RUN CGO_ENABLED=0 go install ./cmd/chihaya
 # 使用更小的 alpine:latest 镜像作为最终运行环境，这有助于减小最终镜像的大小。
 FROM alpine:latest
 # 安装 SSL 证书，这是 Go 程序在进行 HTTPS 请求时必需的。
-RUN apk add --no-cache ca-certificates
+# 安装 SSL 证书和 su-exec
+RUN apk add --no-cache ca-certificates su-exec
+
 # 从第一阶段 (build-env) 复制已编译好的 chihaya 二进制文件到根目录 /。
 COPY --from=build-env /go/bin/chihaya /chihaya
+
+# 复制默认配置文件到 /defaults 目录作为备份
+COPY dist/config.yaml /defaults/config.yaml
+
+# 复制 entrypoint 脚本
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 创建一个名为 'chihaya' 的非特权用户。
 # -D: 不创建家目录，适用于服务账号。
@@ -39,10 +48,10 @@ RUN adduser -D chihaya
 # 6969: UDP tracker 接口。
 EXPOSE 6880 6969
 
-# 降级到非 root 用户 (chihaya) 运行，提高安全性。
-USER chihaya
+# 注意：这里不再使用 USER chihaya，因为我们需要 root 权限来修改挂载卷的权限
+# 降权操作将在 entrypoint.sh 中通过 su-exec 完成
 
-# 设置容器启动时执行的命令，即运行 chihaya 程序。
-ENTRYPOINT ["/chihaya"]
-# 默认配置文件路径，可在运行时通过 -config 标志覆盖。
-CMD ["-config", "/dist/config.yaml"]
+# 设置容器启动时执行的命令
+ENTRYPOINT ["/entrypoint.sh"]
+# 默认参数，传递给 entrypoint.sh
+CMD ["/chihaya", "--config", "/dist/config.yaml"]
