@@ -23,6 +23,10 @@ import (
 	"github.com/chihaya/chihaya/pkg/log"
 )
 
+type passkeyPayloadKey struct{}
+
+var PasskeyPayloadKey = passkeyPayloadKey{}
+
 const Name = "passkey approval"
 
 func init() { middleware.RegisterDriver(Name, driver{}) }
@@ -164,8 +168,10 @@ func parseRedisURL(target string) (*redisURL, error) {
 }
 
 type Payload struct {
-	Passkey   string `json:"pk"`
-	Timestamp int64  `json:"ts"`
+	Passkey   string      `json:"pk"`
+	Timestamp int64       `json:"ts"`
+	Fd        interface{} `json:"fd,omitempty"`
+	Pd        interface{} `json:"pd,omitempty"`
 }
 
 func (h *hook) decrypt(ciphertext string) (*Payload, error) {
@@ -227,6 +233,7 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 			return ctx, ErrInvalidPasskey
 		}
 		passkey = payload.Passkey
+		ctx = context.WithValue(ctx, PasskeyPayloadKey, payload)
 	} else {
 		// Encryption disabled, just read passkey
 		passkey = routeParam(ctx, "passkey")

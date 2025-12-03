@@ -55,6 +55,36 @@ func TestEncryptDecrypt(t *testing.T) {
 	assert.Equal(t, ts, decryptedPayload.Timestamp)
 }
 
+func TestEncryptDecrypt_WithFdPd(t *testing.T) {
+	key := "01234567890123456789012345678901" // 32 bytes
+	cfg := Config{EncryptionKey: key}
+	h, err := NewHook(cfg)
+	assert.NoError(t, err)
+
+	hookInstance := h.(*hook)
+
+	// Encrypt
+	pk := "mysecretpasskey"
+	ts := int64(1234567890)
+	payload := Payload{Passkey: pk, Timestamp: ts, Fd: true, Pd: "50%"}
+	payloadBytes, _ := json.Marshal(payload)
+
+	block, _ := aes.NewCipher([]byte(key))
+	gcm, _ := cipher.NewGCM(block)
+	nonce := make([]byte, gcm.NonceSize())
+	io.ReadFull(rand.Reader, nonce)
+	ciphertext := gcm.Seal(nonce, nonce, payloadBytes, nil)
+	encoded := base64.URLEncoding.EncodeToString(ciphertext)
+
+	// Decrypt
+	decryptedPayload, err := hookInstance.decrypt(encoded)
+	assert.NoError(t, err)
+	assert.Equal(t, pk, decryptedPayload.Passkey)
+	assert.Equal(t, ts, decryptedPayload.Timestamp)
+	assert.Equal(t, true, decryptedPayload.Fd)
+	assert.Equal(t, "50%", decryptedPayload.Pd)
+}
+
 func TestHandleAnnounce_Encryption(t *testing.T) {
 	key := "01234567890123456789012345678901"
 	cfg := Config{EncryptionKey: key}
@@ -84,8 +114,13 @@ func TestHandleAnnounce_Encryption(t *testing.T) {
 	}
 
 	// It should NOT return ErrInvalidPasskey. It will likely return ErrUnapprovedPasskey because we didn't mock Redis/HTTP.
-	_, err = h.HandleAnnounce(ctx, req, nil)
+	newCtx, err := h.HandleAnnounce(ctx, req, nil)
 	assert.Equal(t, ErrUnapprovedPasskey, err)
+
+	// Check context for payload
+	payload, ok := newCtx.Value(PasskeyPayloadKey).(*Payload)
+	assert.True(t, ok)
+	assert.Equal(t, "validpasskey", payload.Passkey)
 
 	// 2. Invalid Encrypted Passkey (Garbage in credential)
 	req.Params = mockParams{
