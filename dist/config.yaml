@@ -114,22 +114,22 @@ chihaya:
   #   config:
   #     # 垃圾回收频率：值越低更频繁回收（更耗 CPU，节省内存）；值越高更少回收（省 CPU，占用更多内存）
   #     gc_interval: "3m"
-  #
+  
   #     # 指标上报间隔：infohash 与 peers 数量聚合后上报至 Prometheus
   #     prometheus_reporting_interval: "1s"
-  #
+  
   #     # Peer 过期时间：建议略大于 `announce_interval`
   #     peer_lifetime: "31m"
-  #
+  
   #     # Redis 地址
-  #     redis_broker: "redis://pwd@127.0.0.1:6379/0"
-  #
+  #     redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"
+  
   #     # 读取超时
   #     redis_read_timeout: "15s"
-  #
+  
   #     # 写入超时
   #     redis_write_timeout: "15s"
-  #
+  
   #     # 连接超时
   #     redis_connect_timeout: "15s"
 

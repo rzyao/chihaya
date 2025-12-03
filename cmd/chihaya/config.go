@@ -11,14 +11,14 @@ import (
 	"github.com/chihaya/chihaya/frontend/udp"
 	"github.com/chihaya/chihaya/middleware"
 
-  // Imports to register middleware drivers.
-  _ "github.com/chihaya/chihaya/middleware/clientapproval"
-  _ "github.com/chihaya/chihaya/middleware/jwt"
-  _ "github.com/chihaya/chihaya/middleware/jwtoptional"
-  _ "github.com/chihaya/chihaya/middleware/trafficpush"
-  _ "github.com/chihaya/chihaya/middleware/passkeyapproval"
-  _ "github.com/chihaya/chihaya/middleware/torrentapproval"
-  _ "github.com/chihaya/chihaya/middleware/varinterval"
+	// Imports to register middleware drivers.
+	_ "github.com/chihaya/chihaya/middleware/clientapproval"
+	_ "github.com/chihaya/chihaya/middleware/jwt"
+	_ "github.com/chihaya/chihaya/middleware/jwtoptional"
+	_ "github.com/chihaya/chihaya/middleware/passkeyapproval"
+	_ "github.com/chihaya/chihaya/middleware/torrentapproval"
+	_ "github.com/chihaya/chihaya/middleware/trafficpush"
+	_ "github.com/chihaya/chihaya/middleware/varinterval"
 
 	// Imports to register storage drivers.
 	_ "github.com/chihaya/chihaya/storage/memory"
