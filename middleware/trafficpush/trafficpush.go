@@ -147,16 +147,31 @@ func parseRedisURL(target string) (*redisURL, error) {
 func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceRequest, resp *bittorrent.AnnounceResponse) (context.Context, error) {
 	// 1) 识别用户：优先从命名路由参数 :passkey，其次查询参数 passkey
 	passkey := routeParam(ctx, "passkey")
-	if payload, ok := ctx.Value(passkeyapproval.PasskeyPayloadKey).(*passkeyapproval.Payload); ok && payload.Passkey != "" {
-		passkey = payload.Passkey
+	log.Debug("traffic push: routeParam passkey", log.Fields{"passkey": passkey, "InfoHash": req.InfoHash.String()})
+
+	// 从 context 获取 passkeyapproval 中间件存储的 payload
+	if payload, ok := ctx.Value(passkeyapproval.PasskeyPayloadKey).(*passkeyapproval.Payload); ok && payload != nil {
+		log.Debug("traffic push: payload from context", log.Fields{
+			"payload.Passkey": payload.Passkey,
+			"InfoHash":        req.InfoHash.String(),
+		})
+		if payload.Passkey != "" {
+			passkey = payload.Passkey
+		}
+	} else {
+		log.Debug("traffic push: no payload in context", log.Fields{"InfoHash": req.InfoHash.String()})
 	}
+
 	if passkey == "" {
 		if v := req.Params; v != nil {
 			if pk, ok := v.String("passkey"); ok {
 				passkey = pk
+				log.Debug("traffic push: passkey from params", log.Fields{"passkey": passkey, "InfoHash": req.InfoHash.String()})
 			}
 		}
 	}
+
+	log.Debug("traffic push: final passkey", log.Fields{"passkey": passkey, "InfoHash": req.InfoHash.String()})
 
 	// 2) 收集上下文字段与统计值
 	ih := req.InfoHash.String()
