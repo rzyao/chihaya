@@ -230,6 +230,10 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 
 		payload, err := h.decrypt(ciphertext)
 		if err != nil {
+			log.Error("failed to decrypt passkey", log.Fields{
+				"err":        err,
+				"ciphertext": ciphertext,
+			})
 			return ctx, ErrInvalidPasskey
 		}
 		passkey = payload.Passkey

@@ -1,10 +1,10 @@
 ---
 chihaya:
   # Announce 间隔：告知客户端在不同事件之间应隔多久再次上报
-  announce_interval: "30m"
+  announce_interval: "1m"
 
   # 最小 Announce 间隔：告知客户端两次上报之间的最短时间
-  min_announce_interval: "15m"
+  min_announce_interval: "1m"
 
   # 指标服务器监听地址：用于采集 Prometheus 指标与 pprof 性能分析
   #
