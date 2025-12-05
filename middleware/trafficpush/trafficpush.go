@@ -147,6 +147,9 @@ func parseRedisURL(target string) (*redisURL, error) {
 func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceRequest, resp *bittorrent.AnnounceResponse) (context.Context, error) {
 	// 1) 识别用户：优先从命名路由参数 :passkey，其次查询参数 passkey
 	passkey := routeParam(ctx, "passkey")
+	if payload, ok := ctx.Value(passkeyapproval.PasskeyPayloadKey).(*passkeyapproval.Payload); ok && payload.Passkey != "" {
+		passkey = payload.Passkey
+	}
 	if passkey == "" {
 		if v := req.Params; v != nil {
 			if pk, ok := v.String("passkey"); ok {

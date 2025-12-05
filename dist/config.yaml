@@ -135,18 +135,6 @@ chihaya:
 
   # 中间件配置（在返回响应前执行）
   prehooks:
-    # 流量推送中间件：在 Announce 时将增量上传/下载写入 Redis Streams 供 PT 消费
-    - name: "traffic push"
-      options:
-        redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"  # Redis 连接串（含密码与 DB）
-        stream_key: "tracker:traffic"                 # Redis Stream 的键名
-        last_key_prefix: "tracker:last"               # 记录上次计数的 Hash 前缀
-        retry_count: 3                                 # 推送失败重试次数
-        retry_interval: "1s"                          # 重试间隔
-        redis_read_timeout: "15s"                     # 读取超时
-        redis_write_timeout: "15s"                    # 写入超时
-        redis_connect_timeout: "15s"                  # 连接超时
-
     # passkey 审批中间件：优先在 Redis 集合校验；未命中时回源 PT 接口
     - name: "passkey approval"
       options:
@@ -161,6 +149,18 @@ chihaya:
         redis_write_timeout: "15s"
         redis_connect_timeout: "15s"
         encryption_key: "01234567890123456789012345678901" # 必须是 32 字节,对称加密密钥，和后端约定
+
+    # 流量推送中间件：在 Announce 时将增量上传/下载写入 Redis Streams 供 PT 消费
+    - name: "traffic push"
+      options:
+        redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"  # Redis 连接串（含密码与 DB）
+        stream_key: "tracker:traffic"                 # Redis Stream 的键名
+        last_key_prefix: "tracker:last"               # 记录上次计数的 Hash 前缀
+        retry_count: 3                                 # 推送失败重试次数
+        retry_interval: "1s"                          # 重试间隔
+        redis_read_timeout: "15s"                     # 读取超时
+        redis_write_timeout: "15s"                    # 写入超时
+        redis_connect_timeout: "15s"                  # 连接超时
   # （已不使用 JWT；如需启用，请参见 JWT 或 JWT Optional 配置示例）
 
   # 客户端白名单配置
