@@ -16,6 +16,7 @@ import (
 	_ "github.com/chihaya/chihaya/middleware/jwt"
 	_ "github.com/chihaya/chihaya/middleware/jwtoptional"
 	_ "github.com/chihaya/chihaya/middleware/passkeyapproval"
+	_ "github.com/chihaya/chihaya/middleware/peerlimit"
 	_ "github.com/chihaya/chihaya/middleware/torrentapproval"
 	_ "github.com/chihaya/chihaya/middleware/trafficpush"
 	_ "github.com/chihaya/chihaya/middleware/varinterval"

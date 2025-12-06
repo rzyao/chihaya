@@ -149,6 +149,17 @@ chihaya:
         redis_write_timeout: "15s"
         redis_connect_timeout: "15s"
         encryption_key: "01234567890123456789012345678901" # 必须是 32 字节,对称加密密钥，和后端约定
+    
+    # peer limit 中间件：限制每个用户每个 torrent 的 peer 数量
+    - name: "peer limit"
+      options:
+        # Redis 连接地址，建议与 passkey/traffic 使用同一个
+        redis_broker: "redis://redis_ZGZtnj@127.0.0.1:6379/0"
+        # Redis 键前缀，默认为 tracker:limit
+        limit_key_prefix: "tracker:limit"
+        # Peer 记录有效期，建议设置为 Announce 间隔的 1.5 - 2 倍
+        # 如果用户非正常断开，此时间后锁会自动释放
+        peer_lifetime: "30m"
 
     # 流量推送中间件：在 Announce 时将增量上传/下载写入 Redis Streams 供 PT 消费
     - name: "traffic push"
