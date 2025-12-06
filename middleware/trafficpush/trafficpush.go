@@ -203,11 +203,6 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 	// 5) 更新上次计数快照（含端点与时间戳）
 	_, _ = conn.Do("HMSET", lastKey, "uploaded", uploaded, "downloaded", downloaded, "port", port, "ip", ipStr, "af", af, "ts", nowTs)
 
-	// 若无增量且事件为 none，则跳过写入，减少噪音
-	if du == 0 && dd == 0 && req.Event == bittorrent.None {
-		return ctx, nil
-	}
-
 	args := redis.Args{}.Add("XADD").Add(h.cfg.StreamKey).Add("*")
 	// 6) 计算时长与响应建议间隔（秒）
 	dt := int64(0)
