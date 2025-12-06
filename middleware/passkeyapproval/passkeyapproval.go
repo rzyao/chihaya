@@ -268,17 +268,6 @@ func (h *hook) HandleAnnounce(ctx context.Context, req *bittorrent.AnnounceReque
 				"passkey":  passkey,
 				"InfoHash": req.InfoHash.String(),
 			})
-			// Debug: confirm payload is in context
-			if p, pok := ctx.Value(PasskeyPayloadKey).(*Payload); pok && p != nil {
-				log.Debug("passkeyapproval: payload stored in context", log.Fields{
-					"passkey":  p.Passkey,
-					"InfoHash": req.InfoHash.String(),
-				})
-			} else {
-				log.Warn("passkeyapproval: payload NOT in context after storing!", log.Fields{
-					"InfoHash": req.InfoHash.String(),
-				})
-			}
 			return ctx, nil
 		}
 		log.Info("passkey not found in redis", log.Fields{
